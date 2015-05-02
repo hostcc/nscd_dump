@@ -1,5 +1,5 @@
 /* A simple program to dump NSCD persistent database contents.
-   Based on /nscd/connections.c from 
+   Based on nscd/connections.c from 
     CentOS Glibc package 'glibc-2.5-20061008T1257':
 	 Copyright (C) 1998-2007, 2008, 2009 Free Software Foundation, Inc.
    	 Contributed by Ulrich Drepper <drepper@cygnus.com>, 1998.
@@ -36,28 +36,26 @@
 #include "nscd.h"
 
 /* Map request type to a string.  */
-const char *const serv2str[LASTREQ] =
-{
-  [GETPWBYNAME] = "GETPWBYNAME",
-  [GETPWBYUID] = "GETPWBYUID",
-  [GETGRBYNAME] = "GETGRBYNAME",
-  [GETGRBYGID] = "GETGRBYGID",
-  [GETHOSTBYNAME] = "GETHOSTBYNAME",
-  [GETHOSTBYNAMEv6] = "GETHOSTBYNAMEv6",
-  [GETHOSTBYADDR] = "GETHOSTBYADDR",
-  [GETHOSTBYADDRv6] = "GETHOSTBYADDRv6",
-  [SHUTDOWN] = "SHUTDOWN",
-  [GETSTAT] = "GETSTAT",
-  [INVALIDATE] = "INVALIDATE",
-  [GETFDPW] = "GETFDPW",
-  [GETFDGR] = "GETFDGR",
-  [GETFDHST] = "GETFDHST",
-  [GETAI] = "GETAI",
-  [INITGROUPS] = "INITGROUPS"
+const char *const serv2str[LASTREQ] = {
+	[GETPWBYNAME] = "GETPWBYNAME",
+	[GETPWBYUID] = "GETPWBYUID",
+	[GETGRBYNAME] = "GETGRBYNAME",
+	[GETGRBYGID] = "GETGRBYGID",
+	[GETHOSTBYNAME] = "GETHOSTBYNAME",
+	[GETHOSTBYNAMEv6] = "GETHOSTBYNAMEv6",
+	[GETHOSTBYADDR] = "GETHOSTBYADDR",
+	[GETHOSTBYADDRv6] = "GETHOSTBYADDRv6",
+	[SHUTDOWN] = "SHUTDOWN",
+	[GETSTAT] = "GETSTAT",
+	[INVALIDATE] = "INVALIDATE",
+	[GETFDPW] = "GETFDPW",
+	[GETFDGR] = "GETFDGR",
+	[GETFDHST] = "GETFDHST",
+	[GETAI] = "GETAI",
+	[INITGROUPS] = "INITGROUPS"
 };
 
-enum usekey
-  {
+enum usekey {
     use_not = 0,
     /* The following three are not really used, they are symbolic constants.  */
     use_first = 16,
@@ -77,55 +75,50 @@ enum usekey
     use_data_begin = use_data | use_begin,
     use_data_end = use_data | use_end,
     use_data_first = use_data_begin | use_first
-  };
+};
 
-
-static int
+const char *
 check_use (const char *data, nscd_ssize_t first_free, uint8_t *usemap,
-	   enum usekey use, ref_t start, size_t len)
-{
-  assert (len >= 2);
+		   enum usekey use, ref_t start, size_t len) {
+	assert (len >= 2);
 
-  if (start > first_free || start + len > first_free
-      || (start & BLOCK_ALIGN_M1))
-    return 0;
+	if (    start > first_free || start + len > first_free
+		|| (start & BLOCK_ALIGN_M1))
+		return "Hash entry isn't properly aligned";
 
-  if (usemap[start] == use_not)
-    {
-      /* Add the start marker.  */
-      usemap[start] = use | use_begin;
-      use &= ~use_first;
+	if (usemap[start] == use_not) {
+		/* Add the start marker. */
+		usemap[start] = use | use_begin;
+		use &= ~use_first;
 
-      while (--len > 0)
-	if (usemap[++start] != use_not)
-	  return 0;
-	else
-	  usemap[start] = use;
+		while (--len > 0)
+		if (usemap[++start] != use_not)
+			return "Hash entry isn't marked as free where it has to be";
+		else
+	 		usemap[start] = use;
 
-      /* Add the end marker.  */
-      usemap[start] = use | use_end;
-    }
-  else if ((usemap[start] & ~use_first) == ((use | use_begin) & ~use_first))
-    {
-      /* Hash entries can't be shared.  */
-      if (use == use_he)
-	return 0;
+		/* Add the end marker. */
+		usemap[start] = use | use_end;
+	} else if (    (usemap[start] & ~use_first)
+				== ((use | use_begin) & ~use_first)) {
+    	/* Hash entries can't be shared. */
+    	if (use == use_he)
+			return "Hash entry can't be shared";
+	
+		usemap[start] |= (use & use_first);
+    	use &= ~use_first;
 
-      usemap[start] |= (use & use_first);
-      use &= ~use_first;
+    	while (--len > 1)
+			if (usemap[++start] != use)
+				return "Hash entry isn't marked as in use where it has to be";
 
-      while (--len > 1)
-	if (usemap[++start] != use)
-	  return 0;
+    	if (usemap[++start] != (use | use_end))
+			return "Hash entry isn't marked as last onee where it has to be";
+    } else
+    	/* Points to a wrong object or somewhere in the middle. */
+		return "Invalid pointer to a hash entry";
 
-      if (usemap[++start] != (use | use_end))
-	return 0;
-    }
-  else
-    /* Points to a wrong object or somewhere in the middle.  */
-    return 0;
-
-  return 1;
+	return NULL;
 }
 
 
@@ -133,6 +126,7 @@ check_use (const char *data, nscd_ssize_t first_free, uint8_t *usemap,
 const char *
 verify_persistent_db (void *mem, struct database_pers_head *readhead)
 {
+	const char *msg;
 	time_t now = time (NULL);
 
 	struct database_pers_head *head = mem;
@@ -182,131 +176,126 @@ verify_persistent_db (void *mem, struct database_pers_head *readhead)
 	if (head->maxnsearched < 0)
 		return "Negative number of maximum search entries";
     
-  uint8_t *usemap = calloc (head->first_free, 1);
-  if (usemap == NULL)
-    return "Memory allocation failure";
+	uint8_t *usemap = calloc (head->first_free, 1);
+	if (usemap == NULL)
+		return "Memory allocation failure";
 
-  const char *data = (char *) &head->array[roundup (head->module,
-						    ALIGN / sizeof (ref_t))];
+	const char *data = (char *) &head->array[roundup (head->module,
+					   ALIGN / sizeof (ref_t))];
 
-  nscd_ssize_t he_cnt = 0;
-  for (nscd_ssize_t cnt = 0; cnt < head->module; ++cnt)
-    {
-      ref_t trail = head->array[cnt];
-      ref_t work = trail;
-      int tick = 0;
+	nscd_ssize_t he_cnt = 0;
+	for (nscd_ssize_t cnt = 0; cnt < head->module; ++cnt) {
+		ref_t trail = head->array[cnt];
+		ref_t work = trail;
+		int tick = 0;
 
-      while (work != ENDREF)
-	{
-	  if (! check_use (data, head->first_free, usemap, use_he, work,
-			   sizeof (struct hashentry)))
-	    goto fail;
+		while (work != ENDREF) {
+			msg = check_use (data, head->first_free, usemap, use_he, work,
+							sizeof (struct hashentry));
+			if (msg != NULL)
+				return msg;
 
-	  /* Now we know we can dereference the record.  */
-	  struct hashentry *here = (struct hashentry *) (data + work);
+			/* Now we know we can dereference the record.  */
+			struct hashentry *here = (struct hashentry *) (data + work);
 
-	  ++he_cnt;
+			++he_cnt;
 
-	  /* Make sure the record is for this type of service.  */
-	  if (here->type >= LASTREQ) {
-	      printf ("record type is out of bounds\n");
-	      goto fail;
-	  }
+			/* Make sure the record is for this type of service. */
+			if (here->type >= LASTREQ)
+				return "Record type is out of bounds";
 
-	  if (!(here->type == GETHOSTBYNAME
-		  || here->type == GETHOSTBYNAMEv6
-		  || here->type == GETHOSTBYADDR
-		  || here->type == GETHOSTBYADDRv6
-		  || here->type == GETAI)) {
-	    printf ("invalid record type: %s\n", serv2str[here->type]);
-	    goto fail;
-	  }
+			if (! (here->type == GETHOSTBYNAME
+				|| here->type == GETHOSTBYNAMEv6
+				|| here->type == GETHOSTBYADDR
+				|| here->type == GETHOSTBYADDRv6
+				|| here->type == GETAI))
+				return "Invalid record type";
 
-	  /* Validate boolean field value.  */
-	  if (here->first != false && here->first != true) {
-	      printf ("invalid boolean field\n");
-	    goto fail;
-	  }
+			/* Validate boolean field value.  */
+			if (here->first != false && here->first != true)
+				return "Invalid boolean field";
 
-	  if (here->len < 0) {
-	    printf ("invalid record length\n");
-	    goto fail;
-	  }
+			if (here->len < 0)
+				return "Negative record length";
 
-	  /* Now the data.  */
-	  if (here->packet < 0
-	      || here->packet > head->first_free
-	      || here->packet + sizeof (struct datahead) > head->first_free)
-	    goto fail;
+			/* Now the data. */
+			if (here->packet < 0)
+				return "Negative packet offset";
 
-	  struct datahead *dh = (struct datahead *) (data + here->packet);
+			if (here->packet > head->first_free)
+				return "Packet offset beyond first free byte";
 
-	  if (! check_use (data, head->first_free, usemap,
-			   use_data | (here->first ? use_first : 0),
-			   here->packet, dh->allocsize))
-	    goto fail;
+			if (here->packet + sizeof (struct datahead) > head->first_free)
+				return "Packet data offset beyond first free byte";
 
-	  if (dh->allocsize < sizeof (struct datahead)
-	      || dh->recsize > dh->allocsize
-	      || (dh->notfound != false && dh->notfound != true)
-	      || (dh->usable != false && dh->usable != true))
-	    goto fail;
+			struct datahead *dh = (struct datahead *) (data + here->packet);
 
-	  if (here->key < here->packet + sizeof (struct datahead)
-	      || here->key > here->packet + dh->allocsize
-	      || here->key + here->len > here->packet + dh->allocsize)
-	    {
+			msg = check_use (data, head->first_free, usemap,
+			   				use_data | (here->first ? use_first : 0),
+			   				here->packet, dh->allocsize);
+			if (msg != NULL)
+				return msg;
+
+			if (dh->allocsize < sizeof (struct datahead))
+				return "Short data header size";
+			if (dh->recsize > dh->allocsize)
+				return "Data size is above allocated one";
+			if (dh->notfound != false && dh->notfound != true)
+				return "Invalid \"notfound\" field contents";
+			if (dh->usable != false && dh->usable != true)
+				return "Invalid \"usable\" field contents";
+
+			if (   here->key < here->packet + sizeof (struct datahead)
+				|| here->key > here->packet + dh->allocsize
+				|| here->key + here->len > here->packet + dh->allocsize) {
 #if SEPARATE_KEY
-	      /* If keys can appear outside of data, this should be done
-		 instead.  But gc doesn't mark the data in that case.  */
-	      if (! check_use (data, head->first_free, usemap,
-			       use_key | (here->first ? use_first : 0),
-			       here->key, here->len))
+			/* If keys can appear outside of data, this should be done
+			   instead.  But gc doesn't mark the data in that case.
+			 */
+				msg = check_use (data, head->first_free, usemap,
+				   				 use_key | (here->first ? use_first : 0),
+				   				 here->key, here->len);
+				if (msg != NULL)
+					return msg;
 #endif
-		goto fail;
-	    }
+					return "Invalid hash entry";
+			}
 
-	  work = here->next;
+			work = here->next;
 
-	  if (work == trail)
-	    /* A circular list, this must not happen.  */
-	    goto fail;
-	  if (tick)
-	    trail = ((struct hashentry *) (data + trail))->next;
-	  tick = 1 - tick;
+			/* A circular list, this must not happen.  */
+			if (work == trail)
+				return "Circullar list detected";
+			
+			if (tick)
+				trail = ((struct hashentry *) (data + trail))->next;
+			
+			tick = 1 - tick;
+		}
 	}
-    }
 
-  if (he_cnt != head->nentries) {
-      printf ("Actual number of records (%i) doesn't match with one in header (%i)\n",
-      		he_cnt, head->nentries);
-    goto fail;
-  }
+	if (he_cnt != head->nentries)
+		return "Actual number of records doesn't match with one in header";
 
-  /* See if all data and keys had at least one reference from
-     he->first == true hashentry.  */
-  for (ref_t idx = 0; idx < head->first_free; ++idx)
-    {
+	/* See if all data and keys had at least one reference from
+	   he->first == true hashentry.
+	 */
+	for (ref_t idx = 0; idx < head->first_free; ++idx) {
 #if SEPARATE_KEY
-      if (usemap[idx] == use_key_begin)
-	goto fail;
+		if (usemap[idx] == use_key_begin)
+			return "Unreferenced data and/or keys found";
 #endif
-      if (usemap[idx] == use_data_begin)
-	goto fail;
-    }
+		if (usemap[idx] == use_data_begin)
+			return "Unreferenced data and/or keys found";
+	}
 
-  /* Finally, make sure the database hasn't changed since the first test.  */
-  if (memcmp (mem, &head_copy, sizeof (*head)) != 0)
-    goto fail;
+	/* Finally, make sure the database hasn't changed since the first test. */
+	if (memcmp (mem, &head_copy, sizeof (*head)) != 0)
+		return "Database header changed in transit";
 
-  free (usemap);
-  return NULL;
-
-fail:
-  free (usemap);
-  return "Error";
+	free (usemap);
+	return NULL;
 }
-
 
 void
 print_db_header_stats (struct database_pers_head *head) {
@@ -332,90 +321,103 @@ print_db_header_stats (struct database_pers_head *head) {
 	printf ("Additions failed          : %lu\n", head->addfailed);
 }
 
-#ifdef O_CLOEXEC
-# define EXTRA_O_FLAGS O_CLOEXEC
-#else
-# define EXTRA_O_FLAGS 0
-#endif
-
 int
 main (int argc, char *argv[])
 {
-
-	const char *db_filename = argv[1];
- 	/* Try to open the appropriate file on disk.  */
-	int fd = open (db_filename, O_RDWR | EXTRA_O_FLAGS);
-	if (fd != -1)
-	{
-		const char *msg = NULL;
-		struct stat64 st;
-		void *mem;
-		size_t total;
-		struct database_pers_head head;
-		ssize_t n = read (fd, &head, sizeof (head));
-		if (n != sizeof (head) || fstat64 (fd, &st) != 0)
-		  {
-		  fail_db_errno:
-		    /* The code is single-threaded at this point so
-		       using strerror is just fine.  */
-		    msg = strerror (errno);
-		  fail_db:
-		    printf ("invalid persistent database file \"%s\": %s\n",
-		    	    db_filename, msg);
-		  }
-		else if (head.module == 0 && head.data_size == 0)
-		  {
-		    /* The file has been created, but the head has not
-		       been initialized yet.  */
-		    msg = "uninitialized header";
-		    goto fail_db;
-		  }
-		else if (head.header_size != (int) sizeof (head))
-		  {
-		    msg = "header size does not match";
-		    goto fail_db;
-		  }
-		else if ((total = (sizeof (head)
-				   + roundup (head.module * sizeof (ref_t),
-					      ALIGN)
-				   + head.data_size))
-			 > st.st_size
-			 || total < sizeof (head))
-		  {
-		    msg = "file size does not match";
-		    goto fail_db;
-		  }
-		/* Note we map with the maximum size allowed for the
-		   database.  This is likely much larger than the
-		   actual file size.  This is OK on most OSes since
-		   extensions of the underlying file will
-		   automatically translate more pages available for
-		   memory access.  */
-		else if ((mem = mmap (NULL,  DEFAULT_MAX_DB_SIZE,
-				      PROT_READ | PROT_WRITE,
-				      MAP_SHARED, fd, 0))
-			 == MAP_FAILED)
-		  goto fail_db_errno;
-		else if ((msg = verify_persistent_db (mem, &head)) != NULL)
-		  {
-		    munmap (mem, total);
-		    goto fail_db;
-		  }
-		else
-		  {
-			print_db_header_stats (&head);
-		    munmap (mem, total);
-		  }
-
-		/* Close the file descriptors in case something went
-		   wrong in which case the variable have not been
-		   assigned -1.  */
-		if (fd != -1)
-		  close (fd);
-	      }
-	    else
-	{
-	      printf ("cannot access '%s': %s\n", db_filename, strerror (errno));
-	      return 1;
+	if (argc != 2) {
+		printf ("Usage: nscd_dump <NSCD persistent database file>\n");
+		return 1;
 	}
+	
+	const char *db_filename = argv[1];
+
+ 	/* Try to open the appropriate file on disk. */
+	int fd = open (db_filename, O_RDONLY);
+	if (fd == -1) {
+    	fprintf (stderr, "Cannot access database file \"%s\": %s\n",
+				 db_filename, strerror (errno));
+    	return 1;
+	}
+
+	struct stat64 st;
+	void *mem;
+	size_t total;
+	struct database_pers_head head;
+
+	ssize_t n = read (fd, &head, sizeof (head));
+	if (n != sizeof (head)) {
+		fprintf (stderr, "Short read on database file \"%s\"\n",
+				 db_filename);
+		close (fd);
+		return 1;
+	}
+
+	if (fstat64 (fd, &st) != 0) {
+		fprintf (stderr, "fstat() error on database file \"%s\": %s\n",
+				 db_filename, strerror (errno));
+		close (fd);
+		return 1;
+	}
+
+	/* The file has been created, but the head has not
+	   been initialized yet.  */
+	if (head.module == 0 && head.data_size == 0) {
+		fprintf (stderr, "Invalid persistent database file \"%s\": "
+				"uninitialized header\n",
+				db_filename);
+		close (fd);
+		return 1;
+	}
+	
+	if (head.header_size != (int) sizeof (head)) {
+		fprintf (stderr, "Invalid persistent database file \"%s\": "
+				"header size does not match\n",
+				db_filename);
+		close (fd);
+		return 1;
+	}
+	
+	if ((total = (sizeof (head)
+			   + roundup (head.module * sizeof (ref_t),
+					  ALIGN)
+			   + head.data_size))
+		 > st.st_size
+		 || total < sizeof (head)) {
+		fprintf (stderr, "Invalid persistent database file \"%s\": "
+				"file size does not match\n",
+				db_filename);
+		close (fd);
+		return 1;
+	}
+
+	/* Note we map with the maximum size allowed for the
+	   database. This is likely much larger than the
+	   actual file size.  This is OK on most OSes since
+	   extensions of the underlying file will
+	   automatically translate more pages available for
+	   memory access.
+	 */
+	if ((mem = mmap (NULL, DEFAULT_MAX_DB_SIZE,
+					 PROT_READ,
+					 MAP_PRIVATE, fd, 0)) == MAP_FAILED) {
+		fprintf (stderr, "mmap() error on database file \"%s\": %s\n",
+				 db_filename, strerror (errno));
+		close (fd);
+		return 1;
+	}
+
+	const char *msg = verify_persistent_db (mem, &head);
+	if (msg != NULL) {
+		fprintf (stderr, "Error validating database file \"%s\": %s\n",
+				 db_filename, msg);
+		munmap (mem, total);
+		close (fd);
+		return 1;
+	}
+	printf ("Database file \"%s\" validated\n\n",	db_filename);
+
+	print_db_header_stats (&head);
+
+	munmap (mem, total);
+  	close (fd);
 }
