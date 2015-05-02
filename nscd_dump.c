@@ -464,12 +464,23 @@ print_entries (void *mem, int verbose) {
 int
 main (int argc, char *argv[])
 {
-	if (argc != 2) {
-		printf ("Usage: nscd_dump <NSCD persistent database file>\n");
+	if (!(argc == 2 || argc == 3)) {
+		printf ("Usage: nscd_dump [-v] <NSCD persistent database file>\n");
 		return 1;
 	}
-	
-	const char *db_filename = argv[1];
+
+	const char *db_filename;
+	int verbose = 0;
+
+	for (argv++; *argv; argv++) {
+		if (!strcmp (*argv, "-v")) {
+			verbose = 1;
+			continue;
+		}
+
+		db_filename = *argv;
+		continue;
+	}
 
  	/* Try to open the appropriate file on disk. */
 	int fd = open (db_filename, O_RDONLY);
@@ -557,7 +568,7 @@ main (int argc, char *argv[])
 	printf ("Database file \"%s\" validated\n\n",	db_filename);
 
 	print_db_header_stats (&head);
-	print_entries (mem, 0);
+	print_entries (mem, verbose);
 
 	munmap (mem, total);
   	close (fd);
