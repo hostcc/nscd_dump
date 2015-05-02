@@ -98,10 +98,10 @@ check_use (const char *data, nscd_ssize_t first_free, uint8_t *usemap,
 		use &= ~use_first;
 
 		while (--len > 0)
-		if (usemap[++start] != use_not)
-			return "Hash entry isn't marked as free where it has to be";
-		else
-	 		usemap[start] = use;
+			if (usemap[++start] != use_not)
+				return "Hash entry isn't marked as free where it has to be";
+			else
+				usemap[start] = use;
 
 		/* Add the end marker. */
 		usemap[start] = use | use_end;
