@@ -406,9 +406,10 @@ print_hashentry_datahead (struct hashentry *he, struct datahead *dh,
 void
 print_ip_addr (int af_family, void *addr) {
 	char ip_addr_buf[MAX(INET_ADDRSTRLEN,INET6_ADDRSTRLEN)];
+	const char *output;
 
-	printf ("%s",
-			inet_ntop (af_family, addr, ip_addr_buf, sizeof (ip_addr_buf)));
+	output = inet_ntop (af_family, addr, ip_addr_buf, sizeof (ip_addr_buf));
+	printf ("%s", output ? output : strerror (errno));
 }
 
 ref_t
@@ -447,9 +448,8 @@ print_hst_resp_data (request_type type, hst_response_header *hst_resp,
 		for (int i = 0 ; i < hst_resp->h_addr_list_cnt; i++) {
 			printf ("%s ", i > 0 ? "," : "");
 
-			printf ("(%s) ",
-					af2str[hst_resp->h_addrtype] ?
-						af2str[hst_resp->h_addrtype] : "Unknown");
+			printf ("(%s) ", af2str[hst_resp->h_addrtype]
+						? af2str[hst_resp->h_addrtype] : "Unknown");
 			print_ip_addr (    type == GETHOSTBYADDR
 							|| type == GETHOSTBYNAME
 								? AF_INET : AF_INET6, addr);
@@ -516,8 +516,8 @@ print_ai_resp_data (ai_response_header *ai_resp,
 		printf ("%c", canon[i]);
 	printf ("\"");
 	consumed += ai_resp->canonlen;
-
 	printf ("\n");
+
 	return consumed;
 }
 
