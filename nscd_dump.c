@@ -1,4 +1,9 @@
 /* A simple program to dump NSCD persistent database contents.
+
+   Supports DB version 1 only, version 2 has introduced in 2.14.90 by
+   commit 3a2c02424d9824f5cdea4ebd32ff929b2b1f49c6
+   (Git head: de7827ff96076cb4d181ed781c418601906fa772).
+
    Based on nscd/connections.c from 
     CentOS Glibc package 'glibc-2.5-20061008T1257':
 	 Copyright (C) 1998-2007, 2008, 2009 Free Software Foundation, Inc.
