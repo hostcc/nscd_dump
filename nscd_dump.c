@@ -372,6 +372,7 @@ print_entries (void *mem, int verbose) {
 				printf (" Key len: %u", here->len);
 				printf (", Usable: %u", dh->usable);
 				printf (", Not found: %u", dh->notfound);
+				printf (", Reloads: %u", dh->nreloads);
 				printf (", First: %u\n", here->first);
 				printf (" Service: %s", serv2str[here->type]);
 			}
