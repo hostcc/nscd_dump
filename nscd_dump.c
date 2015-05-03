@@ -424,7 +424,9 @@ print_hst_resp_data (request_type type, hst_response_header *hst_resp,
 
 	if (verbose) {
 		printf (", version: %u", hst_resp->version);
-		printf (", found: %s\n", hst_resp->found ? "yes" : "no");
+		printf (", %s response\n", hst_resp->found < 0
+				? "disabled" : hst_resp->found
+					? "positive" : "negative");
 		printf (" Name len: %u", hst_resp->h_name_len);
 		printf (", aliases count: %u", hst_resp->h_aliases_cnt);
 		printf (", length: %u", hst_resp->h_length);
@@ -492,7 +494,9 @@ print_ai_resp_data (ai_response_header *ai_resp,
 
 	if (verbose) {
 		printf (", version: %u", ai_resp->version);
-		printf (", found: %s\n", ai_resp->found ? "yes" : "no");
+		printf (", %s response\n", ai_resp->found < 0
+				? "disabled" : ai_resp->found
+					? "positive" : "negative");
 		printf (" Number of addresses: %u", ai_resp->naddrs);
 		printf (", address length: %u", ai_resp->addrslen);
 		printf (", canonical address lenght: %u", ai_resp->canonlen);
