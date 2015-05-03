@@ -254,6 +254,11 @@ verify_persistent_db (void *mem, struct database_pers_head *readhead)
 				return "Packet data offset beyond first free byte";
 			}
 
+			if (here->first != false && here->first != true) {
+				free (usemap);
+				return "Invalid \"first\" field contents";
+			}
+
 			struct datahead *dh = (struct datahead *) (data + here->packet);
 
 			msg = check_use (data, head->first_free, usemap,
@@ -390,9 +395,9 @@ print_hashentry_datahead (struct hashentry *he, struct datahead *dh,
 
 	const char *tstamp = asctime (gmtime ((time_t *) &dh->timeout));
 	printf ("\". Expires, UTC: %s", tstamp ? tstamp : "Invalid");
-	printf (" Usable: %s", dh->usable ? "yes" : "no");
-	printf (", found: %s", dh->notfound ? "no" : "yes");
-	printf (", reloads: %u", dh->nreloads);
+	printf (" Record is %susable", dh->usable ? "" : "un");
+	printf (", %s response", dh->notfound ? "negative" : "positive");
+	printf (", reloads in cache w/o change: %u", dh->nreloads);
 	printf (", first: %s\n", he->first ? "yes" : "no");
 
 	if (verbose) {
