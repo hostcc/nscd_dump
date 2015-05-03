@@ -202,8 +202,10 @@ verify_persistent_db (void *mem, struct database_pers_head *readhead)
 		while (work != ENDREF) {
 			msg = check_use (data, head->first_free, usemap, use_he, work,
 							sizeof (struct hashentry));
-			if (msg != NULL)
+			if (msg != NULL) {
+				free (usemap);
 				return msg;
+			}
 
 			/* Now we know we can dereference the record.  */
 			struct hashentry *here = (struct hashentry *) (data + work);
@@ -211,49 +213,73 @@ verify_persistent_db (void *mem, struct database_pers_head *readhead)
 			++he_cnt;
 
 			/* Make sure the record is for this type of service. */
-			if (here->type >= LASTREQ)
+			if (here->type >= LASTREQ) {
+				free (usemap);
 				return "Record type is out of bounds";
+			}
 
 			if (! (here->type == GETHOSTBYNAME
 				|| here->type == GETHOSTBYNAMEv6
 				|| here->type == GETHOSTBYADDR
 				|| here->type == GETHOSTBYADDRv6
-				|| here->type == GETAI))
+				|| here->type == GETAI)) {
+				free (usemap);
 				return "Invalid record type";
+			}
 
 			/* Validate boolean field value.  */
-			if (here->first != false && here->first != true)
+			if (here->first != false && here->first != true) {
+				free (usemap);
 				return "Invalid boolean field";
+			}
 
-			if (here->len < 0)
+			if (here->len < 0) {
+				free (usemap);
 				return "Negative record length";
+			}
 
 			/* Now the data. */
-			if (here->packet < 0)
+			if (here->packet < 0) {
+				free (usemap);
 				return "Negative packet offset";
+			}
 
-			if (here->packet > head->first_free)
+			if (here->packet > head->first_free) {
+				free (usemap);
 				return "Packet offset beyond first free byte";
+			}
 
-			if (here->packet + sizeof (struct datahead) > head->first_free)
+			if (here->packet + sizeof (struct datahead) > head->first_free) {
+				free (usemap);
 				return "Packet data offset beyond first free byte";
+			}
 
 			struct datahead *dh = (struct datahead *) (data + here->packet);
 
 			msg = check_use (data, head->first_free, usemap,
 			   				use_data | (here->first ? use_first : 0),
 			   				here->packet, dh->allocsize);
-			if (msg != NULL)
+			if (msg != NULL) {
+				free (usemap);
 				return msg;
+			}
 
-			if (dh->allocsize < sizeof (struct datahead))
+			if (dh->allocsize < sizeof (struct datahead)) {
+				free (usemap);
 				return "Short data header size";
-			if (dh->recsize > dh->allocsize)
+			}
+			if (dh->recsize > dh->allocsize) {
+				free (usemap);
 				return "Data size is above allocated one";
-			if (dh->notfound != false && dh->notfound != true)
+			}
+			if (dh->notfound != false && dh->notfound != true) {
+				free (usemap);
 				return "Invalid \"notfound\" field contents";
-			if (dh->usable != false && dh->usable != true)
+			}
+			if (dh->usable != false && dh->usable != true) {
+				free (usemap);
 				return "Invalid \"usable\" field contents";
+			}
 
 			if (   here->key < here->packet + sizeof (struct datahead)
 				|| here->key > here->packet + dh->allocsize
@@ -265,17 +291,22 @@ verify_persistent_db (void *mem, struct database_pers_head *readhead)
 				msg = check_use (data, head->first_free, usemap,
 				   				 use_key | (here->first ? use_first : 0),
 				   				 here->key, here->len);
-				if (msg != NULL)
+				if (msg != NULL) {
+					free (usemap);
 					return msg;
+				}
 #endif
-					return "Invalid hash entry";
+				free (usemap);
+				return "Invalid hash entry";
 			}
 
 			work = here->next;
 
 			/* A circular list, this must not happen.  */
-			if (work == trail)
+			if (work == trail) {
+				free (usemap);
 				return "Circullar list detected";
+			}
 			
 			if (tick)
 				trail = ((struct hashentry *) (data + trail))->next;
@@ -284,24 +315,32 @@ verify_persistent_db (void *mem, struct database_pers_head *readhead)
 		}
 	}
 
-	if (he_cnt != head->nentries)
+	if (he_cnt != head->nentries) {
+		free (usemap);
 		return "Actual number of records doesn't match with one in header";
+	}
 
 	/* See if all data and keys had at least one reference from
 	   he->first == true hashentry.
 	 */
 	for (ref_t idx = 0; idx < head->first_free; ++idx) {
 #if SEPARATE_KEY
-		if (usemap[idx] == use_key_begin)
+		if (usemap[idx] == use_key_begin) {
+			free (usemap);
 			return "Unreferenced data and/or keys found";
+		}
 #endif
-		if (usemap[idx] == use_data_begin)
+		if (usemap[idx] == use_data_begin) {
+			free (usemap);
 			return "Unreferenced data and/or keys found";
+		}
 	}
 
 	/* Finally, make sure the database hasn't changed since the first test. */
-	if (memcmp (mem, &head_copy, sizeof (*head)) != 0)
+	if (memcmp (mem, &head_copy, sizeof (*head)) != 0) {
+		free (usemap);
 		return "Database header changed in transit";
+	}
 
 	free (usemap);
 	return NULL;
