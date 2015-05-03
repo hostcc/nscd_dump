@@ -333,6 +333,156 @@ print_db_header_stats (struct database_pers_head *head) {
 }
 
 void
+print_hashentry_datahead (struct hashentry *he, struct datahead *dh,
+						  const char *key, int nr, int verbose) {
+	char ip_addr_buf[MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN)];
+
+	printf ("#%u. Key: \"", nr);
+	if (   he->type == GETHOSTBYADDR
+		|| he->type == GETHOSTBYADDRv6) {
+		printf ("%s",
+			inet_ntop (he->type == GETHOSTBYADDRv6
+						? AF_INET6 : AF_INET,
+					   key, ip_addr_buf, sizeof (ip_addr_buf)));
+	} else {
+		for (int i = 0; i < he->len - 1; i++)
+			printf ("%c", key[i]);
+	}
+
+	printf ("\". Expires, UTC: %s",
+			asctime (gmtime ((time_t *) &dh->timeout)));
+	printf (" Usable: %s", dh->usable ? "yes" : "no");
+	printf (", found: %s", dh->notfound ? "no" : "yes");
+	printf (", reloads: %u", dh->nreloads);
+	printf (", first: %s\n", he->first ? "yes" : "no");
+
+	if (verbose) {
+		printf (" Key len: %u", he->len);
+		printf (", allocated size: %u", dh->allocsize);
+		printf (", record size: %u\n", dh->recsize);
+		printf (" Service: %s", serv2str[he->type]);
+	}
+}
+
+void
+print_ip_addr (int af_family, void *addr) {
+	char ip_addr_buf[MAX(INET_ADDRSTRLEN,INET6_ADDRSTRLEN)];
+
+	printf ("%s",
+			inet_ntop (af_family, addr, ip_addr_buf, sizeof (ip_addr_buf)));
+}
+
+ref_t
+print_hst_resp_data (request_type type, hst_response_header *hst_resp,
+					 char *resp_data, int verbose) {
+	ref_t consumed = 0;
+
+	if (verbose) {
+		printf (", version: %u", hst_resp->version);
+		printf (", found: %s\n", hst_resp->found ? "yes" : "no");
+		printf (" Name len: %u", hst_resp->h_name_len);
+		printf (", aliases count: %u", hst_resp->h_aliases_cnt);
+		printf (", length: %u", hst_resp->h_length);
+		printf (", address list count: %u", hst_resp->h_addr_list_cnt);
+		printf (", error: %u\n", hst_resp->error);
+	}
+	consumed += sizeof (*hst_resp);
+
+	printf ("  Name: \"");
+	for (int i = 0; i < hst_resp->h_name_len-1; i++)
+		printf ("%c", resp_data[i]);
+	consumed += hst_resp->h_name_len;
+
+	uint8_t *addr = (uint8_t *) resp_data + hst_resp->h_name_len;
+
+	uint32_t *aliases_len = NULL;
+	if (hst_resp->h_aliases_cnt) {
+		aliases_len = (uint32_t *) addr;
+		int aliases_len_sz = sizeof (uint32_t) * hst_resp->h_aliases_cnt;
+		addr += aliases_len_sz;
+		consumed += aliases_len_sz;
+	}
+
+	printf ("\"\n  Addresses: ");
+	if (hst_resp->h_addr_list_cnt) {
+		for (int i = 0 ; i < hst_resp->h_addr_list_cnt; i++) {
+			printf ("%s ", i > 0 ? "," : "");
+
+			printf ("(%s) ",
+					af2str[hst_resp->h_addrtype] ?
+						af2str[hst_resp->h_addrtype] : "Unknown");
+			print_ip_addr (    type == GETHOSTBYADDR
+							|| type == GETHOSTBYNAME
+								? AF_INET : AF_INET6, addr);
+
+			addr += hst_resp->h_length;
+			consumed += hst_resp->h_length;
+		}
+	} else
+		printf ("none");
+
+	printf ("\n  Aliases: ");
+	if (hst_resp->h_aliases_cnt) {
+		for (int i = 0 ; i < hst_resp->h_aliases_cnt; i++) {
+			printf ("%s ", i > 0 ? "," : "");
+
+			printf ("\"");
+			for (int j = 0; j < aliases_len[i] - 1; j++)
+				printf ("%c", addr[j]);
+			printf ("\"");
+
+			addr += aliases_len[i];
+			consumed += aliases_len[i];
+		}
+	} else
+		printf ("none");
+	printf ("\n");
+
+	return consumed;
+}
+
+ref_t
+print_ai_resp_data (ai_response_header *ai_resp,
+					char *resp_data, int verbose) {
+	ref_t consumed = 0;
+
+	if (verbose) {
+		printf (", version: %u", ai_resp->version);
+		printf (", found: %s\n", ai_resp->found ? "yes" : "no");
+		printf (" Number of addresses: %u", ai_resp->naddrs);
+		printf (", address length: %u", ai_resp->addrslen);
+		printf (", canonical address lenght: %u", ai_resp->canonlen);
+		printf (", error: %u\n", ai_resp->error);
+	}
+	consumed += sizeof (*ai_resp);
+
+
+	uint8_t *addrs = (uint8_t *) resp_data;
+	uint8_t *families = addrs + ai_resp->addrslen;
+	printf ("  Addresses: ");
+	for (int i = 0 ; i < ai_resp->naddrs; i++) {
+		printf ("%s ", i > 0 ? "," : "");
+		printf ("(%s) ", af2str[families[i]] ? af2str[families[i]] : "Unknown");
+		print_ip_addr (families[i], addrs);
+		int addr_sz = families[i] == AF_INET6
+			? sizeof (struct in6_addr) : sizeof (struct in_addr);
+		addrs += addr_sz;
+		consumed += addr_sz;
+		consumed += sizeof (families[i]);
+	}
+
+	unsigned char *canon = families + sizeof (uint8_t) * ai_resp->naddrs;
+	printf ("\n  Canonical name: \"");
+	for (int i = 0; i < ai_resp->canonlen - 1; i++)
+		printf ("%c", canon[i]);
+	printf ("\"");
+	consumed += ai_resp->canonlen;
+
+	printf ("\n");
+	return consumed;
+}
+
+void
 print_entries (void *mem, int verbose) {
 
 	struct database_pers_head *head = mem;
@@ -340,125 +490,40 @@ print_entries (void *mem, int verbose) {
 	const char *data = (char *) &head->array[roundup (head->module,
 					   ALIGN / sizeof (ref_t))];
 
-	char ip_addr_buf[MAX(INET_ADDRSTRLEN,INET6_ADDRSTRLEN)];
-
 	nscd_ssize_t he_cnt = 0;
 	for (nscd_ssize_t cnt = 0; cnt < head->module; ++cnt) {
 		ref_t work = head->array[cnt];
 
 		while (work != ENDREF) {
-			/* Now we know we can dereference the record.  */
 			struct hashentry *here = (struct hashentry *) (data + work);
 			struct datahead *dh = (struct datahead *) (data + here->packet);
+			const char *key = data + here->key;
+
 			++he_cnt;
 
-			printf ("#%u. Key: \"", he_cnt);
-			const char *key = data + here->key;
-			if (   here->type == GETHOSTBYADDR
-				|| here->type == GETHOSTBYADDRv6) {
-				printf ("%s",
-					inet_ntop (here->type == GETHOSTBYADDRv6
-								? AF_INET6 : AF_INET,
-							   key, ip_addr_buf, sizeof (ip_addr_buf)));
-			} else {
-				for (int i=0; i < here->len - 1; i++)
-					printf ("%c", key[i]);
-			}
+			print_hashentry_datahead (here, dh, key, he_cnt, verbose);
 
-			printf ("\". Expires, UTC: %s",
-					asctime (gmtime ((time_t *) &dh->timeout)));
-
-			if (verbose) {
-				printf (" Key len: %u", here->len);
-				printf (", Usable: %u", dh->usable);
-				printf (", Not found: %u", dh->notfound);
-				printf (", Reloads: %u", dh->nreloads);
-				printf (", First: %u\n", here->first);
-				printf (" Service: %s", serv2str[here->type]);
-			}
-
+			ref_t consumed = 0;
 			if (   here->type == GETHOSTBYNAME
 				|| here->type == GETHOSTBYNAMEv6
 				|| here->type == GETHOSTBYADDR
 				|| here->type == GETHOSTBYADDRv6) {
 				hst_response_header hst_resp = dh->data[0].hstdata;
 				char *resp_data = (char *) (&dh->data[0].hstdata + 1);
-				if (verbose) {
-					printf (", version: %u", hst_resp.version);
-					printf (", found: %u\n", hst_resp.found);
-					printf (" Name len: %u", hst_resp.h_name_len);
-					printf (", aliases count: %u", hst_resp.h_aliases_cnt);
-					printf (", length: %u", hst_resp.h_length);
-					printf (", address list count: %u", hst_resp.h_addr_list_cnt);
-					printf (", error: %u\n", hst_resp.error);
-				}
-				printf ("  Name: \"");
-				for (int i = 0; i < hst_resp.h_name_len-1; i++)
-					printf ("%c", resp_data[i]);
-
-				printf ("\"\n  Addresses: ");
-				uint8_t *addr = (uint8_t *) resp_data + hst_resp.h_name_len;
-				if (hst_resp.h_addr_list_cnt) {
-					for (int i = 0 ; i < hst_resp.h_addr_list_cnt; i++) {
-						printf ("%s ", i > 0 ? "," : "");
-						printf ("(%s) ",
-								af2str[hst_resp.h_addrtype] ?
-									af2str[hst_resp.h_addrtype] : "Unknown");
-						printf ("%s",
-								inet_ntop (   here->type == GETHOSTBYADDR
-										   || here->type == GETHOSTBYNAME
-									? AF_INET : AF_INET6,
-								   addr, ip_addr_buf, sizeof (ip_addr_buf)));
-						addr += hst_resp.h_length;
-					}
-				} else
-					printf ("none");
-				printf ("\n  Aliases: ");
-				if (hst_resp.h_aliases_cnt) {
-					for (int i = 0 ; i < hst_resp.h_aliases_cnt; i++) {
-						printf ("%s ", i > 0 ? "," : "");
-						printf ("%s",
-								inet_ntop (   here->type == GETHOSTBYADDR
-										   || here->type == GETHOSTBYNAME
-												? AF_INET : AF_INET6,
-								   addr, ip_addr_buf, sizeof (ip_addr_buf)));
-						addr += hst_resp.h_length;
-					}
-				} else
-					printf ("none");
-				printf ("\n");
+				consumed = print_hst_resp_data (here->type, &hst_resp,
+												resp_data, verbose);
 			}
 
 			if (here->type == GETAI) {
 				ai_response_header ai_resp = dh->data[0].aidata;
-				uint8_t *addrs = (uint8_t *) (&dh->data[0].aidata + 1);
-				uint8_t *families = addrs + ai_resp.addrslen;
-				unsigned char *canon = families + sizeof (uint8_t) * ai_resp.naddrs;
-				if (verbose) {
-					printf (", version: %u", ai_resp.version);
-					printf (", found: %u\n", ai_resp.found);
-					printf (" Number of addresses: %u", ai_resp.naddrs);
-					printf (", address length: %u", ai_resp.addrslen);
-					printf (", canonical address lenght: %u", ai_resp.canonlen);
-					printf (", error: %u\n", ai_resp.error);
-				}
+				char *resp_data = (char *) (&dh->data[0].aidata + 1);
+				consumed = print_ai_resp_data (&ai_resp, resp_data, verbose);
+			}
 
-				printf ("  Canonical name: \"");
-				for (int i = 0; i < ai_resp.canonlen - 1; i++)
-					printf ("%c", canon[i]);
-				printf ("\"\n");
-
-				printf ("  Addresses: ");
-				for (int i = 0 ; i < ai_resp.naddrs; i++) {
-					printf ("%s ", i > 0 ? "," : "");
-					printf ("(%s) ", af2str[families[i]] ? af2str[families[i]] : "Unknown");
-					printf ("%s",
-							inet_ntop (families[i],
-								   addrs, ip_addr_buf, sizeof (ip_addr_buf)));
-					addrs += families[i] == AF_INET6
-						? sizeof (struct in6_addr) : sizeof (struct in_addr);
-				}
-				printf ("\n");
+			if (consumed != dh->recsize) {
+				fprintf (stderr, "Not all of data is processed for record #%u:"
+						 " allocated %u, processed %u\n",
+						 he_cnt, dh->recsize, consumed);
 			}
 
 			printf ("\n");
