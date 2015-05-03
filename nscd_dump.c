@@ -353,8 +353,8 @@ print_db_header_stats (struct database_pers_head *head) {
     printf ("Database header size      : %u\n", head->header_size);
   	printf ("GC cycles                 : %u\n", head->gc_cycle);
 	printf ("Taken from running daemon : %u\n", head->nscd_certainly_running);
-	printf ("Timestamp, UTC            : %s",
-			asctime (gmtime ((time_t *) &head->timestamp)));
+	const char *tstamp = asctime (gmtime ((time_t *) &head->timestamp));
+	printf ("Timestamp, UTC            : %s", tstamp ? tstamp : "Invalid");
 	printf ("Modules                   : %u\n", head->module);
 	printf ("Data size                 : %u\n", head->data_size);
 	printf ("First free byte offset    : %u\n", head->first_free);
@@ -388,8 +388,8 @@ print_hashentry_datahead (struct hashentry *he, struct datahead *dh,
 			printf ("%c", key[i]);
 	}
 
-	printf ("\". Expires, UTC: %s",
-			asctime (gmtime ((time_t *) &dh->timeout)));
+	const char *tstamp = asctime (gmtime ((time_t *) &dh->timeout));
+	printf ("\". Expires, UTC: %s", tstamp ? tstamp : "Invalid");
 	printf (" Usable: %s", dh->usable ? "yes" : "no");
 	printf (", found: %s", dh->notfound ? "no" : "yes");
 	printf (", reloads: %u", dh->nreloads);
